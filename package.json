@@ -1,0 +1,13 @@
+{
+  "name": "thread-scrapper",
+  "version": "1.0.0",
+  "description": "Scrape Threads posts through your already-logged-in Chrome",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

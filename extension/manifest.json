@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Thread Scrapper Bridge",
+  "version": "1.0.0",
+  "description": "Lets the local Thread Scrapper web app scrape Threads using this already-logged-in Chrome.",
+  "permissions": ["tabs", "scripting", "alarms", "storage"],
+  "host_permissions": ["https://www.threads.com/*", "https://www.threads.net/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Thread Scrapper Bridge" }
+}

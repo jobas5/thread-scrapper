@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thread Scrapper</title>
+<style>
+  :root { --bg:#f5f5f7; --card:#fff; --ink:#111; --muted:#6b6b70; --line:#e4e4e8; --accent:#111; --ok:#2a8f4a; --bad:#c0392b; --warn:#b7791f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; }
+  .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 10px; border-radius:999px; background:#fde8e6; color:var(--bad); }
+  .pill.on { background:#e3f4e8; color:var(--ok); }
+  .pill::before { content:""; width:8px; height:8px; border-radius:50%; background:currentColor; }
+  main { max-width:1100px; margin:24px auto; padding:0 24px; display:grid; gap:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  form { display:grid; grid-template-columns: 1fr 120px auto; gap:10px; align-items:end; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  input[type=text], input[type=number] { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  button { padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .hint { color:var(--muted); font-size:12px; margin:8px 0 0; }
+  .setup { background:#fff8e6; border-color:#f3dc9a; }
+  .setup code { background:#fff; padding:1px 5px; border-radius:4px; border:1px solid #eee; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; }
+  tr.job { cursor:pointer; }
+  tr.job.active { background:#f0f0f4; }
+  .status { font-size:12px; font-weight:600; }
+  .status.queued { color:var(--muted); } .status.running { color:var(--warn); } .status.done { color:var(--ok); } .status.failed, .status.cancelled { color:var(--bad); }
+  .toolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; }
+  .toolbar h2 { font-size:15px; margin:0; }
+  .posts td.text { white-space:pre-wrap; max-width:520px; }
+  .num { text-align:right; font-variant-numeric: tabular-nums; }
+  .muted { color:var(--muted); }
+  .quote { margin-top:6px; padding:6px 10px; border-left:3px solid var(--line); color:var(--muted); font-size:13px; }
+  .media { display:flex; gap:4px; margin-top:6px; flex-wrap:wrap; }
+  .media img { height:48px; border-radius:4px; }
+  a { color:#0b5ed7; text-decoration:none; }
+  .empty { color:var(--muted); padding:20px; text-align:center; }
+  @media (max-width: 700px) { form { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Thread Scrapper</h1>
+  <span id="ext" class="pill">extension offline</span>
+</header>
+<main>
+  <section id="setup" class="card setup" hidden>
+    <strong>Extension not connected.</strong> Open <code>chrome://extensions</code> in your logged-in Chrome, turn on <em>Developer mode</em>,
+    click <em>Load unpacked</em> and pick the <code>extension</code> folder of this project. Jobs you add now will start as soon as it connects.
+  </section>
+
+  <section class="card">
+    <form id="form">
+      <div>
+        <label for="url">Threads URL (profile, single thread, search…)</label>
+        <input id="url" type="text" placeholder="https://www.threads.com/@username  or  @username" required>
+      </div>
+      <div>
+        <label for="max">Max posts</label>
+        <input id="max" type="number" min="1" max="5000" value="50">
+      </div>
+      <button id="go" type="submit">Scrape</button>
+    </form>
+    <label style="display:flex;gap:6px;align-items:center;margin-top:10px;font-size:13px;color:var(--ink)"><input id="bg" type="checkbox"> Open the scrape tab in the background (faster to ignore, but Chrome may lazy-load fewer posts)</label>
+    <p class="hint">Profile → the account's posts. Thread URL → the post and its loaded replies. The page is opened in a new tab of your Chrome and scrolled until the limit is reached or nothing new loads.</p>
+  </section>
+
+  <section class="card">
+    <div class="toolbar"><h2>Jobs</h2><button class="ghost" id="refresh">Refresh</button></div>
+    <table>
+      <thead><tr><th>URL</th><th>Status</th><th class="num">Posts</th><th>Created</th><th></th></tr></thead>
+      <tbody id="jobs"></tbody>
+    </table>
+    <div id="jobsEmpty" class="empty">No jobs yet.</div>
+  </section>
+
+  <section class="card" id="results" hidden>
+    <div class="toolbar">
+      <h2 id="resTitle">Results</h2>
+      <div>
+        <input id="filter" type="text" placeholder="Filter text…" style="width:200px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font:inherit">
+        <button class="ghost" id="csv">Download CSV</button>
+        <button class="ghost" id="json">Download JSON</button>
+      </div>
+    </div>
+    <table class="posts">
+      <thead><tr><th>User</th><th>Date</th><th>Text</th><th class="num">Likes</th><th class="num">Replies</th><th class="num">Reposts</th><th class="num">Shares</th></tr></thead>
+      <tbody id="posts"></tbody>
+    </table>
+  </section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const api = (p, o) => fetch('/api' + p, o).then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.status === 204 ? null : r.json(); });
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtDate = (s) => s ? new Date(s).toLocaleString() : '';
+let selected = null, selectedJob = null, jobs = [];
+
+async function loadStatus() {
+  try {
+    const s = await api('/status');
+    $('#ext').className = 'pill' + (s.extensionOnline ? ' on' : '');
+    $('#ext').textContent = s.extensionOnline ? 'extension connected' : 'extension offline';
+    $('#setup').hidden = s.extensionOnline;
+  } catch { $('#ext').className = 'pill'; $('#ext').textContent = 'server unreachable'; }
+}
+
+async function loadJobs() {
+  jobs = await api('/jobs');
+  $('#jobsEmpty').hidden = jobs.length > 0;
+  $('#jobs').innerHTML = jobs.map((j) => `
+    <tr class="job ${j.id === selected ? 'active' : ''}" data-id="${j.id}">
+      <td><a href="${esc(j.url)}" target="_blank" onclick="event.stopPropagation()">${esc(j.url.replace('https://www.threads.com', ''))}</a>${j.error ? `<div class="muted">${esc(j.error)}</div>` : ''}</td>
+      <td><span class="status ${j.status}">${j.status}</span></td>
+      <td class="num">${j.status === 'running' ? j.progress + ' / ' + j.maxPosts : j.postCount}</td>
+      <td class="muted">${fmtDate(j.createdAt)}</td>
+      <td>${j.status === 'queued' ? `<button class="ghost" data-cancel="${j.id}">Cancel</button>` : `<button class="ghost" data-del="${j.id}">Delete</button>`}</td>
+    </tr>`).join('');
+  if (selected) {
+    const j = jobs.find((x) => x.id === selected);
+    if (!j) { selected = null; $('#results').hidden = true; }
+    else if (j.status === 'done' && (!selectedJob || selectedJob.status !== 'done')) await showJob(j.id);
+  }
+}
+
+async function showJob(id) {
+  selected = id;
+  selectedJob = await api('/jobs/' + id);
+  document.querySelectorAll('tr.job').forEach((r) => r.classList.toggle('active', r.dataset.id === id));
+  renderPosts();
+}
+
+function renderPosts() {
+  const j = selectedJob;
+  if (!j) return;
+  $('#results').hidden = false;
+  const q = $('#filter').value.trim().toLowerCase();
+  const posts = (j.posts || []).filter((p) => !q || (p.text || '').toLowerCase().includes(q) || (p.username || '').toLowerCase().includes(q));
+  $('#resTitle').textContent = `${posts.length} post${posts.length === 1 ? '' : 's'} · ${j.url.replace('https://www.threads.com', '')}`;
+  $('#csv').onclick = () => location.href = `/api/jobs/${j.id}/export?format=csv`;
+  $('#json').onclick = () => location.href = `/api/jobs/${j.id}/export?format=json`;
+  $('#posts').innerHTML = posts.length ? posts.map((p) => `
+    <tr>
+      <td><a href="https://www.threads.com/@${esc(p.username)}" target="_blank">@${esc(p.username)}</a></td>
+      <td class="muted"><a href="${esc(p.url)}" target="_blank">${fmtDate(p.timestamp)}</a></td>
+      <td class="text">${esc(p.text)}${p.quoted ? `<div class="quote">↪ @${esc(p.quoted.username)}: ${esc(p.quoted.text)}</div>` : ''}${p.media?.length ? `<div class="media">${p.media.map((m) => m.type === 'image' ? `<a href="${esc(m.src)}" target="_blank"><img src="${esc(m.src)}" alt="${esc(m.alt)}"></a>` : `<a href="${esc(m.src || m.poster)}" target="_blank">▶ video</a>`).join('')}</div>` : ''}</td>
+      <td class="num">${p.likes}</td><td class="num">${p.replies}</td><td class="num">${p.reposts}</td><td class="num">${p.shares}</td>
+    </tr>`).join('') : `<tr><td colspan="7" class="empty">${j.status === 'done' ? 'No posts captured.' : 'Still ' + j.status + '…'}</td></tr>`;
+}
+
+$('#form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#go').disabled = true;
+  try {
+    const job = await api('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: $("#url").value, maxPosts: $("#max").value, background: $("#bg").checked }) });
+    $('#url').value = '';
+    selected = job.id; selectedJob = null;
+    await loadJobs();
+    await showJob(job.id);
+  } catch (err) { alert(err.message); }
+  $('#go').disabled = false;
+};
+$('#jobs').onclick = async (e) => {
+  const del = e.target.dataset.del, cancel = e.target.dataset.cancel, row = e.target.closest('tr.job');
+  if (del) { if (confirm('Delete this job and its data?')) { await api('/jobs/' + del, { method: 'DELETE' }); if (selected === del) { selected = null; $('#results').hidden = true; } await loadJobs(); } return; }
+  if (cancel) { await api('/jobs/' + cancel + '/cancel', { method: 'POST' }); await loadJobs(); return; }
+  if (row) showJob(row.dataset.id);
+};
+$('#refresh').onclick = loadJobs;
+$('#filter').oninput = renderPosts;
+
+loadStatus(); loadJobs();
+setInterval(loadStatus, 3000);
+setInterval(loadJobs, 3000);
+</script>
+</body>
+</html>
